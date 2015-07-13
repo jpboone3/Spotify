@@ -1,4 +1,4 @@
-package com.example.administrator.spotify;
+package com.example.administrator.spotify2;
 
 import android.graphics.Bitmap;
 
@@ -7,6 +7,7 @@ import android.graphics.Bitmap;
  */
 public class StreamerArtist implements Comparable<StreamerArtist> {
 
+    private String artist;                  //artist  name
     private String name;                  //artist or track name
     private String preview_url = null;    // preview song track
     private String song_image_url = null; // large image of song
@@ -14,6 +15,8 @@ public class StreamerArtist implements Comparable<StreamerArtist> {
     private Bitmap thumbnail = null;      // thumbnail of album/song image
     private int popularity = -1;          // popularity of the song (based on 0 - 100)
     private boolean selected = false;     // item selected
+    private int track_number;             // track number
+    private long duration;                 // track number
 
     @Override
     public int compareTo(StreamerArtist compareStreamerArtist) {
@@ -25,6 +28,28 @@ public class StreamerArtist implements Comparable<StreamerArtist> {
             return 1;
         return 0;
 
+    }
+
+    public long getDuration() {
+        return this.duration;
+    }
+
+    public void setDuration(long duration) {
+        this.duration = duration;
+        return;
+    }
+
+    public int getTrackNumber() {
+        return this.track_number;
+    }
+
+    public void setTrackNumber(int number) {
+        this.track_number = number;
+        return;
+    }
+
+    public String getArtist() {
+        return this.artist;
     }
 
     public String getName() {
@@ -41,6 +66,10 @@ public class StreamerArtist implements Comparable<StreamerArtist> {
 
     public void setPopularity(int popularity) {
         this.popularity = popularity;
+    }
+
+    public void setArtist(String artist) {
+        this.artist = artist;
     }
 
     public String getPreviewUrl() {

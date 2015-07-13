@@ -1,9 +1,11 @@
-package com.example.administrator.spotify;
+package com.example.administrator.spotify2;
 
 import android.os.Bundle;
 import android.support.v7.app.ActionBarActivity;
 import android.view.Menu;
 import android.view.MenuItem;
+
+import com.example.administrator.spotify2.R;
 
 
 public class DetailActivity extends ActionBarActivity {

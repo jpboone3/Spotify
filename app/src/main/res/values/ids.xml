@@ -5,4 +5,5 @@
     <item name="list_item_name" type="id">list_item_name</item>
     <item name="artist_name" type="id">artist_name</item>
     <item name="song_image" type="id">song_image</item>
+    <item name="controlsWrapper" type="id">controlsWrapper</item>
 </resources>

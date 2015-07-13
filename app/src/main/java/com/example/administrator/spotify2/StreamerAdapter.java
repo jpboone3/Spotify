@@ -1,4 +1,4 @@
-package com.example.administrator.spotify;
+package com.example.administrator.spotify2;
 
 import android.content.Context;
 import android.view.LayoutInflater;
@@ -11,17 +11,17 @@ import android.widget.TextView;
 import java.util.ArrayList;
 
 
-public class StreamerAdapter extends ArrayAdapter<StreamerArtist> {
+public class StreamerAdapter extends ArrayAdapter<com.example.administrator.spotify2.StreamerArtist> {
 
     private final Context context;
     // declaring our ArrayList of artists
-    private ArrayList<StreamerArtist> objects = null;
+    private ArrayList<com.example.administrator.spotify2.StreamerArtist> objects = null;
 
     /* here we must override the constructor for ArrayAdapter
     * the only variable we care about now is ArrayList<Artist> objects,
     * because it is the list of objects we want to display.
     */
-    public StreamerAdapter(Context context, int textViewResourceId, ArrayList<StreamerArtist> objects) {
+    public StreamerAdapter(Context context, int textViewResourceId, ArrayList<com.example.administrator.spotify2.StreamerArtist> objects) {
         super(context, textViewResourceId, objects);
         this.objects = objects;
         this.context = context;
@@ -64,10 +64,11 @@ public class StreamerAdapter extends ArrayAdapter<StreamerArtist> {
 
             if (mSa.isSelected()) {
                 // set yellow background
-                mName.setBackgroundColor(0xfffff000);
+                mName.setBackgroundColor(0xffffff00);
             } else {
                 // set white background
-                mName.setBackgroundColor(0xffffffff);
+                // the "back" button does not always refresh the backgrounf in a viewlist
+                mName.setBackground(mView.getBackground());
             }
 
             mName.setText(mSa.getName());

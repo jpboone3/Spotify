@@ -1,12 +1,15 @@
-package com.example.administrator.spotify;
+package com.example.administrator.spotify2;
 
+import android.app.Activity;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.graphics.BitmapFactory;
-import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Handler;
+import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
 import android.support.v7.app.AppCompatActivity;
@@ -17,7 +20,6 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
-import android.widget.MediaController;
 import android.widget.Toast;
 
 import java.io.BufferedInputStream;
@@ -31,6 +33,7 @@ import java.util.List;
 
 import kaaes.spotify.webapi.android.SpotifyApi;
 import kaaes.spotify.webapi.android.SpotifyService;
+import kaaes.spotify.webapi.android.models.ArtistSimple;
 import kaaes.spotify.webapi.android.models.Track;
 import kaaes.spotify.webapi.android.models.TracksPager;
 
@@ -39,57 +42,107 @@ import kaaes.spotify.webapi.android.models.TracksPager;
  */
 public class DetailActivityFragment extends Fragment {
 
+    public setTracks mCallback;
+    private String mArtist = null;
     private String mAlbum = null;
     private ArrayAdapter mArtistadApter = null;
     private ArrayList<StreamerArtist> artists = new ArrayList<StreamerArtist>();
-
-
-    private MediaPlayer mediaPlayer;
-    private MediaController mcontroller;
-    private Handler handler = new Handler();
+    //service
+    private Context mContext;
+    private AudioService mAudioService;
+    //binding
+    private View rootView = null;
+    private ServiceConnection mAudioConnection = null;
+    private Intent playIntent = null;
+    //private MediaPlayer mediaPlayer;
+    private ListView mListView;
 
     public DetailActivityFragment() {
     }
 
     @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+
+        // This makes sure that the container activity has implemented
+        // the callback interface. If not, it throws an exception
+        try {
+            mCallback = (setTracks) activity;
+        } catch (ClassCastException e) {
+            // this exception will happen when a tablet is not being used
+            // because the DetailFragment is not loaded yet
+            // Need a more elegant way to handle this
+            mCallback = null;
+            //throw new ClassCastException(activity.toString()
+            //        + " must implement setTracks");
+        }
+    }
+
+    @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        //setHasOptionsMenu(true);
+        mContext = getActivity().getApplicationContext();
+
+        mAudioConnection = new ServiceConnection() {
+
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder service) {
+                AudioService.AudioBinder binder = (AudioService.AudioBinder) service;
+                //get service
+                mAudioService = binder.getService();
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+                mAudioService = null;
+            }
+        };
+        /**
+         *  Explict startservice to ensure the service stays
+         *  activity while the ui transitions ri/from AudioActivity
+         */
+
+        playIntent = new Intent(getActivity(), AudioService.class);
+        mContext.startService(playIntent);
+        mContext.bindService(playIntent, mAudioConnection, Context.BIND_AUTO_CREATE);
+
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
 
-        View rootView = inflater.inflate(R.layout.fragment_detail, container, false);
+        rootView = inflater.inflate(R.layout.fragment_detail, container, false);
         ArrayList<String> ar = new ArrayList();
         ar.add("No Artist Tracks loaded");
 
-
         Bundle extras = getActivity().getIntent().getExtras();
+        if (extras != null) {
 
-        mAlbum = extras.getString("artist");
-
-        // set the title/subtitle on the action bar
-        ((AppCompatActivity) getActivity()).getSupportActionBar().setTitle("Top 10 Tracks");
-
-        ((AppCompatActivity) getActivity()).getSupportActionBar().setSubtitle(mAlbum);
+            mArtist = extras.getString("artist");
+            mAlbum = extras.getString("album");
+            // set the title/subtitle on the action bar
+            ((AppCompatActivity) getActivity()).getSupportActionBar().setTitle("Top 10 Tracks");
+            ((AppCompatActivity) getActivity()).getSupportActionBar().setSubtitle(mAlbum);
+        }
 
         // instantiate our ArtistAdapter class
         mArtistadApter = new StreamerAdapter(getActivity(), R.layout.list_item_artist, artists);
 
-        ListView lv = (ListView) rootView.findViewById(R.id.listview_artist);
-        //lv.requestFocus();
+        mListView = (ListView) rootView.findViewById(R.id.listview_artist);
 
-        lv.setAdapter(mArtistadApter);
+        mListView.setAdapter(mArtistadApter);
 
-        //context = lv.getContext();
-        lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        mListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 //parent,getItemAtPosition(position);
                 StreamerArtist sa = (StreamerArtist) parent.getItemAtPosition(position);
-                String text = sa.getName();
+                int dur = (int) sa.getDuration() / 1000;
+                int min = dur / 60;
+                int sec = dur % 60;
+                String text = String.format("%s  (Duration: %02d:%02d )",
+                        sa.getName(), min, sec);
 
 
                 SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
@@ -97,10 +150,37 @@ public class DetailActivityFragment extends Fragment {
                 prefEditor.putInt("pref_track_selected", position); //**syntax error on tokens**
                 prefEditor.commit();
 
-
                 Intent i = new Intent(getActivity(), AudioActivity.class);
+                i.putExtra("artist_name", sa.getArtist());
                 i.putExtra("album_name", mAlbum);
                 i.putExtra("track_name", text);
+                i.putExtra("track_number", sa.getTrackNumber());
+
+                // create three liss, song url, track name, image url
+                ArrayList<String> songs = new ArrayList<String>();
+                ArrayList<String> tracks = new ArrayList<String>();
+                ArrayList<String> images = new ArrayList<String>();
+
+                int mCount = mListView.getAdapter().getCount();
+
+                for (int j = 0; j < mCount; j++) {
+                    StreamerArtist mSa = (StreamerArtist) mListView.getAdapter().getItem(j);
+                    songs.add(mSa.getPreviewUrl());
+                    String mTrack = String.format("%s  (Duration: %02d:%02d )",
+                            mSa.getName(), min, sec);
+                    tracks.add(mTrack);
+                    images.add(mSa.getSongImageUtl());
+                }
+                if (mArtist == null)
+                    mArtist = preferences.getString("pref_artist", "Unknown Artist");
+
+                if (mCallback != null && mCallback.setTracks(mArtist, mAlbum, sa.getPreviewUrl(), songs, tracks, images))
+                    return;
+
+                i.putStringArrayListExtra("songs", (ArrayList<String>) songs);
+                i.putStringArrayListExtra("tracks", (ArrayList<String>) tracks);
+                i.putStringArrayListExtra("images", (ArrayList<String>) images);
+
                 i.putExtra("track_url", sa.getPreviewUrl());
                 i.putExtra("song_url", sa.getSongImageUtl());
 
@@ -112,21 +192,45 @@ public class DetailActivityFragment extends Fragment {
         return rootView;
     }
 
+    // This method can be called by MainFragment to load
+    // the top 10 tracks when the UI is initated
+    // on a tablet
+    public void startTrackList(String album) {
+        mAlbum = album;
+        updateTracks();
+    }
+
     @Override
     public void onStart() {
         super.onStart();
+
         updateTracks();
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onStop();
+        // design decision to stop the service when the user
+        // is finished with the album
+        if (mAudioService != null)
+            mAudioService.stop();
+        mContext.unbindService(mAudioConnection);
+        mContext.stopService(playIntent);
     }
 
     protected void updateTracks() {
 
-        //boolean metric = preferences.getBoolean("pref_metric", true);
-        DetailActivityFragment.TracklisttaSk task = new DetailActivityFragment.TracklisttaSk();
-        //if (metric)
+        // Load the song image
         if (mAlbum != null && mAlbum.length() > 0) {
+            //boolean metric = preferences.getBoolean("pref_metric", true);
+            DetailActivityFragment.TracklisttaSk task = new DetailActivityFragment.TracklisttaSk();
 
             task.execute(mAlbum);
         }
+    }
+
+    public interface setTracks {
+        public boolean setTracks(String artist, String album, String song, ArrayList songs, ArrayList tracks, ArrayList images);
     }
 
     public class TracklisttaSk extends AsyncTask<String, String, List> {
@@ -137,8 +241,6 @@ public class DetailActivityFragment extends Fragment {
         public TracklisttaSk() {
         }
 
-        //protected String doInBackground(String... args) {}
-        //protected String doInBackground(Object[] params) {
         protected List doInBackground(String... params) {
 
             String mQuery = params[0]; //.trim().replaceAll(" ", "%20");
@@ -147,11 +249,11 @@ public class DetailActivityFragment extends Fragment {
 
             SpotifyApi mApi = new SpotifyApi();
             if (mApi == null) {
-                return null;
+                return mSlist;
             }
             SpotifyService mService = mApi.getService();
             if (mService == null) {
-                return null;
+                return mSlist;
             }
 
             TracksPager mTm = mService.searchTracks(mQuery);
@@ -162,7 +264,10 @@ public class DetailActivityFragment extends Fragment {
                 StreamerArtist sa = new StreamerArtist();
                 Track a = (Track) listOfArtists.get(i);
                 sa.setName(a.name);
-                //sa.popularity  a.popularity.intValue;
+
+                sa.setDuration(a.duration_ms);
+                sa.setArtist(((ArtistSimple) a.artists.get(0)).name);
+                sa.setTrackNumber(a.disc_number);
                 sa.setPopularity(a.popularity);
                 sa.setPreviewUrl(a.preview_url);
                 sa.setSelected(false);
@@ -216,13 +321,13 @@ public class DetailActivityFragment extends Fragment {
             return mSlist;
         }
 
-        //@Override
         protected void onPostExecute(List l) {
             mArtistadApter.clear();
             if (l == null || l.size() == 0) {
                 Toast.makeText(getActivity(), "No artists were found to display, please refine your search.", Toast.LENGTH_LONG).show();
                 return;
             }
+            // update UI to show last track selected, if any
             int mTrackSelected = -1;
             SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
             if (preferences != null) {
@@ -235,6 +340,5 @@ public class DetailActivityFragment extends Fragment {
             mArtistadApter.addAll(l);
             super.onPostExecute(l);
         }
-
     }
 }

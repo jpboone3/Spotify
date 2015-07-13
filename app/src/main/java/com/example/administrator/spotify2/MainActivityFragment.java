@@ -1,5 +1,6 @@
-package com.example.administrator.spotify;
+package com.example.administrator.spotify2;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -37,23 +38,40 @@ import kaaes.spotify.webapi.android.models.Artist;
 import kaaes.spotify.webapi.android.models.ArtistsPager;
 
 /**
- * A placeholder fragment containing a simple view.
+ * Fragment thst displays the artists albums
  */
 public class MainActivityFragment extends Fragment {
 
     private final int MAX_MARTISTS_TO_LIST = 40;
+    public setAlbumSelected mCallback = null;
     private ArrayAdapter mArtistadApter = null;
-    private ArrayList<StreamerArtist> martists = new ArrayList<StreamerArtist>();
+    private ArrayList<com.example.administrator.spotify2.StreamerArtist> martists = new ArrayList<com.example.administrator.spotify2.StreamerArtist>();
     private EditText mArtist_name;
+    private String mArtist;
+    private ListView mListView;
+    private int mArtistSelected = -1;
+
 
     public MainActivityFragment() {
     }
 
+    @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+
+        // This makes sure that the container activity has implemented
+        // the callback interface. If not, it throws an exception
+        try {
+            mCallback = (setAlbumSelected) activity;
+        } catch (ClassCastException e) {
+            throw new ClassCastException(activity.toString()
+                    + " must implement setAlbumSelected");
+        }
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        //setHasOptionsMenu(true);
     }
 
     @Override
@@ -70,27 +88,27 @@ public class MainActivityFragment extends Fragment {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
         if (preferences != null) {
 
-            String name = preferences.getString("pref_artist", null);
-            if (name != null)
-                mArtist_name.setText(name);
+            mArtist = preferences.getString("pref_artist", null);
+            if (mArtist != null)
+                mArtist_name.setText(mArtist);
         }
 
         // prevent the soft keyboard from showing at startup
         mArtist_name.setInputType(0);
-
-        //InputMethodManager imm = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
 
         mArtist_name.setOnEditorActionListener(new EditText.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
 
                 SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
-                String name = preferences.getString("pref_artist", null);
-                if (mArtist_name.equals(name) == false) {
+                mArtist = preferences.getString("pref_artist", null);
+                if (mArtist_name.getText().equals(mArtist) == false) {
                     SharedPreferences.Editor prefEditor = preferences.edit();
                     prefEditor.putString("pref_artist", mArtist_name.getText().toString()); //**syntax error on tokens**
                     prefEditor.putInt("pref_artist_selected", -1); //**syntax error on tokens**
                     prefEditor.commit();
+
+
                 }
 
                 updateMartists();
@@ -101,16 +119,25 @@ public class MainActivityFragment extends Fragment {
         // instantiate our ArtistAdapter class
         mArtistadApter = new StreamerAdapter(getActivity(), R.layout.list_item_artist, martists);
 
-        ListView mListView = (ListView) rootView.findViewById(R.id.listview_artist);
+        mListView = (ListView) rootView.findViewById(R.id.listview_artist);
 
         mListView.setAdapter(mArtistadApter);
 
         mListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                StreamerArtist sa = (StreamerArtist) parent.getItemAtPosition(position);
-                String text = sa.getName();
+                // turn off previous selected album
+                StreamerArtist sa;
+                if (mArtistSelected >= 0) {
+                    sa = (StreamerArtist) parent.getItemAtPosition(mArtistSelected);
+                    sa.setSelected(false);
+                    mArtistSelected = position;
+                }
 
+                // set the current album selected
+                sa = (StreamerArtist) parent.getItemAtPosition(position);
+                String text = sa.getName();
+                sa.setSelected(true);
 
                 SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
                 SharedPreferences.Editor prefEditor = preferences.edit();
@@ -118,9 +145,15 @@ public class MainActivityFragment extends Fragment {
                 prefEditor.putInt("pref_track_selected", -1); //**syntax error on tokens**
                 prefEditor.commit();
 
-
-                Intent i = new Intent(getActivity(), DetailActivity.class);
-                i.putExtra("artist", text);
+                if (mCallback.setAlbumSelected(mArtist, text) == true) {
+                    // the view list may have a different selected album
+                    // force a repaint to ensure the selection is correct
+                    mListView.invalidateViews();
+                    return;
+                }
+                Intent i = new Intent(getActivity(), com.example.administrator.spotify2.DetailActivity.class);
+                i.putExtra("artist", mArtist);
+                i.putExtra("album", text);
 
                 startActivity(i);
             }
@@ -129,15 +162,11 @@ public class MainActivityFragment extends Fragment {
         return rootView;
     }
 
-    //@Override
-    public void onBackPressed() {
-        updateMartists();
-    }
-
     @Override
     public void onStart() {
         super.onStart();
         updateMartists();
+
     }
 
     /**
@@ -160,7 +189,6 @@ public class MainActivityFragment extends Fragment {
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
             case R.id.search:
-                // menu.add(...) --> how to get the menu instance?
                 mArtist_name.setInputType(InputType.TYPE_CLASS_TEXT);
                 mArtist_name.requestFocus();
 
@@ -169,33 +197,35 @@ public class MainActivityFragment extends Fragment {
 
                 if (imm != null) {
                     imm.showSoftInput(mArtist_name, 0);
-                }                //task.execute("94043");
-                //updateMartists();
+                }
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
         }
     }
 
+    public interface setAlbumSelected {
+        public boolean setAlbumSelected(String artist, String album);
+    }
+
     public class ArtisTlisttaSk extends AsyncTask<String, String, List> {
 
         static final String myLOGFILTER = "ArtisTlisttaSk";
 
-        //static final String myLOGFILTER = ArtisTlisttaSk.getClass().getSimpleName();
         public ArtisTlisttaSk() {
         }
 
         protected List doInBackground(String... params) {
             String q = params[0].trim();
 
-            List<StreamerArtist> sl = new ArrayList<StreamerArtist>();
+            List<StreamerArtist> mSl = new ArrayList<StreamerArtist>();
 
             SpotifyApi api = new SpotifyApi();
             if (api == null)
-                return null;
+                return mSl;
             SpotifyService spotify = api.getService();
             if (spotify == null)
-                return null;
+                return mSl;
 
             ArtistsPager results = spotify.searchArtists(q);
             List listOfMartists = results.artists.items;
@@ -234,7 +264,7 @@ public class MainActivityFragment extends Fragment {
                     }
 
                 }
-                sl.add(sa);
+                mSl.add(sa);
 
                 // limit the list to MAX_MARTISTS_TO_LIST
                 if (i >= MAX_MARTISTS_TO_LIST)
@@ -242,7 +272,7 @@ public class MainActivityFragment extends Fragment {
             }
 
 
-            return sl;
+            return mSl;
         }
 
         @Override
@@ -256,22 +286,26 @@ public class MainActivityFragment extends Fragment {
             }
 
 
-            int mArtistSelected = -1;
+            mArtistSelected = -1;
             SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
             if (preferences != null) {
                 mArtistSelected = preferences.getInt("pref_artist_selected", -1);
             }
 
+            // update the UI with the selected item highlighted
             if (mArtistSelected >= 0) {
                 StreamerArtist sa = (StreamerArtist) l.get(mArtistSelected);
+
+                // may be on tablet UI, immediate populate
+                // top 10 track list
+                mCallback.setAlbumSelected(mArtist, sa.getName());
+
                 sa.setSelected(true);
             }
 
-            //mArtistadApter.addAll(s);
             mArtistadApter.addAll(l);
             if (l.size() >= MAX_MARTISTS_TO_LIST)
                 Toast.makeText(getActivity(), "Only showing first " + MAX_MARTISTS_TO_LIST + " martists that match the search.", Toast.LENGTH_LONG).show();
-            //super.onPostExecute(l);
         }
     }
 }
